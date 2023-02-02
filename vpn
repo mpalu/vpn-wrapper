@@ -1,0 +1,175 @@
+#!/bin/env bash
+
+OPERATION="$1"
+INSTALL_DIR="${VPN_INSTALL_DIR:-$HOME/.vpn}"
+
+C_BRED='\033[1;31m'
+C_BYELLOW='\033[1;33m'
+C_BGREEN='\033[1;32m'
+C_OFF='\033[0m'
+
+messages() {
+  echo "vpn on [o]: connect to VPN"
+  echo "vpn off [f]: disconnect to VPN"
+  echo "vpn install [i]: install VPN script"
+  echo "vpn uninstall [u]: uninstall VPN script"
+  echo "vpn status [s]: check the VPN status"
+  echo "vpn quit [q]: exit program"
+}
+
+install() {
+  if [[ ! -f "/usr/local/bin/vpn" ]]; then
+    if [[ ! -f "$INSTALL_DIR/vpn" ]]; then
+      mkdir "$INSTALL_DIR"
+      cp "$0" "$INSTALL_DIR/vpn"
+      chmod +x "$INSTALL_DIR/vpn"
+
+      touch "$INSTALL_DIR/pwd"
+      read -sp "Please provide your password (same as CSID): " PASSWORD
+      echo "$PASSWORD" >"$INSTALL_DIR/pwd"
+      echo ""
+      read -sp "Please provide your Point Sharp 4 digits PIN: " PIN
+      echo "$PIN" >>"$INSTALL_DIR/pwd"
+      echo ""
+      read -sp "Please provide your Point Sharp 6 digits OTP: " OTP
+      echo "$OTP" >>"$INSTALL_DIR/pwd"
+      chmod 400 "$INSTALL_DIR/pwd"
+      sudo chown root:root "$INSTALL_DIR/pwd"
+    fi
+
+    sudo ln -f "$INSTALL_DIR/vpn" "/usr/local/bin/vpn"
+
+    if which vpn >/dev/null; then
+      echo ""
+      echo -e "${C_BGREEN}VPN script successfully installed in '$(which vpn)'${C_OFF}"
+      echo ""
+      messages
+      exit 0
+    else
+      echo -e "${C_BRED}ERROR: Installation failed${C_OFF}"
+    fi
+  else
+    echo -e "${C_BRED}ERROR: Installation failed. '/usr/local/bin/vpn' already exists${C_OFF}"
+  fi
+}
+
+uninstall() {
+  if [[ -f "/usr/local/bin/vpn" ]]; then
+
+    sudo rm "/usr/local/bin/vpn"
+
+    echo ""
+    echo -e "${C_BGREEN}VPN script successfully uninstalled${C_OFF}"
+    echo ""
+  fi
+}
+
+main() {
+  while true; do
+    case "${OPERATION}" in
+    "on" | "o")
+      WIFI_NAME=('VolvoCars.1x' 'VolvoCars')
+
+      for network in "${WIFI_NAME[@]}"; do
+        if iwgetid | grep "$network" >/dev/null; then
+          echo -e "${C_BRED}Connected to '${network}' network that does not require VPN${C_OFF}"
+          exit 1
+        fi
+      done
+
+      f5fpc --info >/dev/null
+      if [[ "$?" == "5" ]]; then
+        f5fpc --stop
+      fi
+
+      SERVER_ADDR=""
+      PASSWORD="$(sudo sed -n '1p' $INSTALL_DIR/pwd)" && echo "Authenticated"
+      PIN="$(sudo sed -n '2p' $INSTALL_DIR/pwd)"
+      OTP="$(sudo sed -n '3p' $INSTALL_DIR/pwd)"
+      UNAME="$USER"
+
+      POINTSHARP_TOKEN="$(java -jar $HOME/.pointsharp/pointsharp_v2.jar ${OTP})"
+
+      f5fpc --start -u "${UNAME}" -p "${PIN}${POINTSHARP_TOKEN}${PASSWORD}" -t "${SERVER_ADDR}" >/dev/null
+      sleep 20
+      echo ""
+      f5fpc --info | head -1
+
+      exit "$?"
+      ;;
+
+    "off" | "f")
+      echo ""
+      f5fpc --stop
+      exit "$?"
+      ;;
+
+    "status" | "s")
+      echo ""
+      f5fpc --info
+      exit "$?"
+      ;;
+
+    "install" | "i")
+      echo ""
+      install
+      exit 0
+      ;;
+
+    "uninstall" | "u")
+      echo ""
+      uninstall
+      exit 0
+      ;;
+
+    "quit" | "q")
+      exit 0
+      ;;
+
+    *)
+      if [[ -n "${OPERATION}" ]]; then
+        echo ""
+        echo -e "${C_BRED}ERROR: Invalid operation '${OPERATION}'${C_OFF}"
+      fi
+      ;;
+    esac
+
+    echo ""
+    echo "Please, select an operation [on, off, status, install, uninstall, quit]"
+    echo ""
+    messages
+    echo ""
+    read -p ": " OPERATION
+    clear
+  done
+}
+
+if [[ ! "$0" == "/usr/local/bin/vpn" ]]; then
+  OPTION=""
+  echo ""
+  read -p "VPN script is not installed. Do you like to install it? [Y/n]: " OPTION
+  clear
+
+  while true; do
+    case "${OPTION}" in
+    "Y" | "y")
+      install
+      break
+      ;;
+
+    "N" | "n")
+      break
+      ;;
+
+    *)
+      echo ""
+      echo -e "${C_BRED}ERROR: Invalid option '${OPTION}'${C_OFF}"
+      echo ""
+      read -p "Please, select an option [Y/n]: " OPTION
+      clear
+      ;;
+    esac
+  done
+fi
+
+main
