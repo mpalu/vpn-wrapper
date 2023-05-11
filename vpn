@@ -1,175 +1,175 @@
 #!/bin/env bash
 
 OPERATION="$1"
+
 INSTALL_DIR="${VPN_INSTALL_DIR:-$HOME/.vpn}"
 
-C_BRED='\033[1;31m'
-C_BYELLOW='\033[1;33m'
-C_BGREEN='\033[1;32m'
-C_OFF='\033[0m'
+SUCCCESS="$(gum style --bold --foreground='#198754')"
+INFO="$(gum style --bold --foreground='#0dcaf0')"
+WARN=$(gum style --bold --foreground='#ffc107')
+ERROR="$(gum style --bold --foreground='#dc3545')"
 
-messages() {
-  echo "vpn on [o]: connect to VPN"
-  echo "vpn off [f]: disconnect to VPN"
-  echo "vpn install [i]: install VPN script"
-  echo "vpn uninstall [u]: uninstall VPN script"
-  echo "vpn status [s]: check the VPN status"
-  echo "vpn quit [q]: exit program"
+check_dependencies() {
+  if ! which gum &>/dev/null; then
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg >/dev/null
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
+    sudo apt update && sudo apt install gum -y >/dev/null
+  fi
+
+  if ! which f5fpc &>/dev/null; then
+    gum style --bold --foreground='#dc3545' "F5 Linux CLI is not installed"
+    gum spin --spinner dot --title "Installing..." -- curl https://iconnect.global.volvocars.biz/public/share/linux_f5cli.x86_64.deb --output /tmp/linux_f5cli.x86_64.deb && sudo dpkg -i /tmp/linux_f5cli.x86_64.deb >/dev/null && gum style --bold --foreground='#198754' "F5 Linux CLI successfully installed"
+  fi
+
+  if ! which java &>/dev/null; then
+    gum style --bold --foreground='#dc3545' "Java Runtime Environment is not installed"
+    gum spin --spinner dot --title "Installing..." -- sudo apt update && sudo apt install openjdk-11-jre -y >/dev/null && gum style --bold --foreground='#198754' "Java Runtime Environment successfully installed"
+  fi
+
+  if [[ ! -f "$HOME/.pointsharp/pointsharp_v2.jar" ]]; then
+    gum style --bold --foreground='#dc3545' "Pointsharp CLI is not installed"
+    mkdir "$HOME/.pointsharp/"
+    gum spin --spinner dot --title "Installing..." -- curl https://confluence.volvocars.biz/download/attachments/259652341/pointsharp_v2.jar --output "$HOME/.pointsharp/pointsharp_v2.jar" >/dev/null && gum style --bold --foreground='#198754' "Pointsharp CLI successfully installed"
+  fi
+}
+
+check_dependencies
+
+menu() {
+  OPERATION=$(gum choose --header "Select an operation" "connect" "disconnect" "status" "credentials" "reconfigure" "install" "uninstall" "exit")
+  main
+}
+
+check_installation() {
+  if [[ ! -f "$INSTALL_DIR/vpn" ]]; then
+    gum confirm "VPN utility is not installed in your system. Would you like to install?" && install
+  fi
+}
+
+set_credentials() {
+  if [[ ! -d "$INSTALL_DIR" ]]; then
+    mkdir "$INSTALL_DIR"
+  fi
+
+  if [[ ! -f "$INSTALL_DIR/pwd" ]]; then
+    touch "$INSTALL_DIR/pwd"
+  else
+    sudo chmod 644 "$INSTALL_DIR/pwd"
+    sudo chown "$USER":"$USER" "$INSTALL_DIR/pwd"
+  fi
+
+  gum input --password --placeholder "Enter your password (same as CDSID)" >"$INSTALL_DIR/pwd"
+  gum input --password --placeholder "Enter your PointSharp 4 digits PIN" >>"$INSTALL_DIR/pwd"
+  gum input --password --placeholder "Enter your PointSharp 6 digits OTP" >>"$INSTALL_DIR/pwd"
+  chmod 400 "$INSTALL_DIR/pwd"
+  sudo chown root:root "$INSTALL_DIR/pwd"
 }
 
 install() {
-  if [[ ! -f "/usr/local/bin/vpn" ]]; then
-    if [[ ! -f "$INSTALL_DIR/vpn" ]]; then
-      mkdir "$INSTALL_DIR"
-      cp "$0" "$INSTALL_DIR/vpn"
-      chmod +x "$INSTALL_DIR/vpn"
+  if [[ -f "$INSTALL_DIR/vpn" ]]; then
+    gum style --bold --foreground='#ffc107' "VPN utility is already installed in your system"
+    menu
+  fi
 
-      touch "$INSTALL_DIR/pwd"
-      read -sp "Please provide your password (same as CSID): " PASSWORD
-      echo "$PASSWORD" >"$INSTALL_DIR/pwd"
-      echo ""
-      read -sp "Please provide your Point Sharp 4 digits PIN: " PIN
-      echo "$PIN" >>"$INSTALL_DIR/pwd"
-      echo ""
-      read -sp "Please provide your Point Sharp 6 digits OTP: " OTP
-      echo "$OTP" >>"$INSTALL_DIR/pwd"
-      chmod 400 "$INSTALL_DIR/pwd"
-      sudo chown root:root "$INSTALL_DIR/pwd"
-    fi
+  set_credentials
 
-    sudo ln -f "$INSTALL_DIR/vpn" "/usr/local/bin/vpn"
+  cp "$0" "$INSTALL_DIR/vpn"
+  chmod +x "$INSTALL_DIR/vpn"
+  sudo ln -f "$INSTALL_DIR/vpn" "/usr/local/bin/vpn"
 
-    if which vpn >/dev/null; then
-      echo ""
-      echo -e "${C_BGREEN}VPN script successfully installed in '$(which vpn)'${C_OFF}"
-      echo ""
-      messages
-      exit 0
-    else
-      echo -e "${C_BRED}ERROR: Installation failed${C_OFF}"
-    fi
+  if which vpn >/dev/null; then
+    gum style --bold --foreground='#198754' "VPN utility successfully installed in '$(which vpn)'"
+    menu
   else
-    echo -e "${C_BRED}ERROR: Installation failed. '/usr/local/bin/vpn' already exists${C_OFF}"
+    gum style --bold --foreground='#dc3545' "Installation failed"
   fi
 }
 
 uninstall() {
   if [[ -f "/usr/local/bin/vpn" ]]; then
-
     sudo rm "/usr/local/bin/vpn"
-
-    echo ""
-    echo -e "${C_BGREEN}VPN script successfully uninstalled${C_OFF}"
-    echo ""
+    gum style --bold --foreground='#198754' "VPN utility successfully uninstalled"
   fi
 }
+
+check_installation
 
 main() {
   while true; do
     case "${OPERATION}" in
-    "on" | "o")
+    "connect")
       WIFI_NAME=('VolvoCars.1x' 'VolvoCars')
 
       for network in "${WIFI_NAME[@]}"; do
         if iwgetid | grep "$network" >/dev/null; then
-          echo -e "${C_BRED}Connected to '${network}' network that does not require VPN${C_OFF}"
-          exit 1
+          gum style --bold --foreground='#ffc107' "Connected to '${network}' network that does not require VPN"
+          exit 0
         fi
       done
 
       f5fpc --info >/dev/null
       if [[ "$?" == "5" ]]; then
-        f5fpc --stop
+        gum style --bold "$(f5fpc --stop)"
       fi
 
-      SERVER_ADDR=""
-      PASSWORD="$(sudo sed -n '1p' $INSTALL_DIR/pwd)" && echo "Authenticated"
+      SERVER_ADDR="https://iconnect.global.volvocars.biz"
+      PASSWORD="$(sudo sed -n '1p' $INSTALL_DIR/pwd)" && echo "Credentials loaded"
       PIN="$(sudo sed -n '2p' $INSTALL_DIR/pwd)"
       OTP="$(sudo sed -n '3p' $INSTALL_DIR/pwd)"
       UNAME="$USER"
-
       POINTSHARP_TOKEN="$(java -jar $HOME/.pointsharp/pointsharp_v2.jar ${OTP})"
 
       f5fpc --start -u "${UNAME}" -p "${PIN}${POINTSHARP_TOKEN}${PASSWORD}" -t "${SERVER_ADDR}" >/dev/null
-      sleep 20
-      echo ""
-      f5fpc --info | head -1
+      gum spin --spinner points --title "Connecting" -- sleep 20
+      gum style --bold "$(f5fpc --info | head -1)"
 
-      exit "$?"
+      exit
       ;;
 
-    "off" | "f")
-      echo ""
-      f5fpc --stop
-      exit "$?"
+    "disconnect")
+      gum spin --spinner points --title "Disconnecting" -- f5fpc --stop
+      exit
       ;;
 
-    "status" | "s")
-      echo ""
-      f5fpc --info
-      exit "$?"
+    "status")
+      gum style --bold "$(f5fpc --info | head -1)"
+      exit
       ;;
 
-    "install" | "i")
-      echo ""
+    "install")
       install
-      exit 0
+      exit
       ;;
 
-    "uninstall" | "u")
-      echo ""
+    "uninstall")
       uninstall
-      exit 0
+      exit
       ;;
 
-    "quit" | "q")
+    "credentials")
+      sudo gum pager <"${INSTALL_DIR}/pwd"
+      exit
+      ;;
+
+    "reconfigure")
+      set_credentials
+      exit
+      ;;
+
+    "exit")
       exit 0
       ;;
 
     *)
-      if [[ -n "${OPERATION}" ]]; then
-        echo ""
-        echo -e "${C_BRED}ERROR: Invalid operation '${OPERATION}'${C_OFF}"
+      if [[ -z "${OPERATION}" ]]; then
+        menu
+      else
+        gum style --bold --foreground='#dc3545' "Unrecognized option '${OPERATION}'"
+        menu
       fi
       ;;
     esac
-
-    echo ""
-    echo "Please, select an operation [on, off, status, install, uninstall, quit]"
-    echo ""
-    messages
-    echo ""
-    read -p ": " OPERATION
-    clear
   done
 }
-
-if [[ ! "$0" == "/usr/local/bin/vpn" ]]; then
-  OPTION=""
-  echo ""
-  read -p "VPN script is not installed. Do you like to install it? [Y/n]: " OPTION
-  clear
-
-  while true; do
-    case "${OPTION}" in
-    "Y" | "y")
-      install
-      break
-      ;;
-
-    "N" | "n")
-      break
-      ;;
-
-    *)
-      echo ""
-      echo -e "${C_BRED}ERROR: Invalid option '${OPTION}'${C_OFF}"
-      echo ""
-      read -p "Please, select an option [Y/n]: " OPTION
-      clear
-      ;;
-    esac
-  done
-fi
 
 main
