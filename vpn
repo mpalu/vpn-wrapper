@@ -1,35 +1,58 @@
 #!/bin/env bash
 
+INSTALL_DIR="${VPN_INSTALL_DIR:-$HOME/.vpn}"
 OPERATION="$1"
 
-INSTALL_DIR="${VPN_INSTALL_DIR:-$HOME/.vpn}"
-
-SUCCCESS="$(gum style --bold --foreground='#198754')"
-INFO="$(gum style --bold --foreground='#0dcaf0')"
-WARN=$(gum style --bold --foreground='#ffc107')
-ERROR="$(gum style --bold --foreground='#dc3545')"
+messages() {
+  case "$1" in
+  "success")
+    gum style --bold --foreground='#198754' "$2"
+    ;;
+  "info")
+    gum style --bold --foreground='#0dcaf0' "$2"
+    ;;
+  "warn")
+    gum style --bold --foreground='#ffc107' "$2"
+    ;;
+  "error")
+    gum style --bold --foreground='#dc3545' "$2"
+    ;;
+  esac
+}
 
 check_dependencies() {
   if ! which gum &>/dev/null; then
-    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg >/dev/null
-    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
+    curl -fsSL https://repo.charm.sh/apt/gpg.key |
+      sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg >/dev/null
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" |
+      sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
     sudo apt update && sudo apt install gum -y >/dev/null
   fi
 
   if ! which f5fpc &>/dev/null; then
-    gum style --bold --foreground='#dc3545' "F5 Linux CLI is not installed"
-    gum spin --spinner dot --title "Installing..." -- curl https://iconnect.global.volvocars.biz/public/share/linux_f5cli.x86_64.deb --output /tmp/linux_f5cli.x86_64.deb && sudo dpkg -i /tmp/linux_f5cli.x86_64.deb >/dev/null && gum style --bold --foreground='#198754' "F5 Linux CLI successfully installed"
+    messages "error" "F5 Linux CLI is not installed"
+    gum spin --spinner dot --title "Installing..." -- \
+      curl https://iconnect.global.volvocars.biz/public/share/linux_f5cli.x86_64.deb \
+      --output /tmp/linux_f5cli.x86_64.deb &&
+      sudo dpkg -i /tmp/linux_f5cli.x86_64.deb >/dev/null &&
+      messages "success" "F5 Linux CLI successfully installed"
   fi
 
   if ! which java &>/dev/null; then
-    gum style --bold --foreground='#dc3545' "Java Runtime Environment is not installed"
-    gum spin --spinner dot --title "Installing..." -- sudo apt update && sudo apt install openjdk-11-jre -y >/dev/null && gum style --bold --foreground='#198754' "Java Runtime Environment successfully installed"
+    messages "error" "Java Runtime Environment is not installed"
+    gum spin --spinner dot --title "Installing..." -- \
+      sudo apt update &&
+      sudo apt install openjdk-11-jre -y >/dev/null &&
+      messages "success" "Java Runtime Environment successfully installed"
   fi
 
   if [[ ! -f "$HOME/.pointsharp/pointsharp_v2.jar" ]]; then
-    gum style --bold --foreground='#dc3545' "Pointsharp CLI is not installed"
+    messages "error" "Pointsharp CLI is not installed"
     mkdir "$HOME/.pointsharp/"
-    gum spin --spinner dot --title "Installing..." -- curl https://confluence.volvocars.biz/download/attachments/259652341/pointsharp_v2.jar --output "$HOME/.pointsharp/pointsharp_v2.jar" >/dev/null && gum style --bold --foreground='#198754' "Pointsharp CLI successfully installed"
+    gum spin --spinner dot --title "Installing..." -- \
+      curl https://confluence.volvocars.biz/download/attachments/259652341/pointsharp_v2.jar \
+      --output "$HOME/.pointsharp/pointsharp_v2.jar" >/dev/null &&
+      messages "success" "Pointsharp CLI successfully installed"
   fi
 }
 
@@ -67,7 +90,7 @@ set_credentials() {
 
 install() {
   if [[ -f "$INSTALL_DIR/vpn" ]]; then
-    gum style --bold --foreground='#ffc107' "VPN utility is already installed in your system"
+    messages "warn" "VPN utility is already installed in your system"
     menu
   fi
 
@@ -78,17 +101,17 @@ install() {
   sudo ln -f "$INSTALL_DIR/vpn" "/usr/local/bin/vpn"
 
   if which vpn >/dev/null; then
-    gum style --bold --foreground='#198754' "VPN utility successfully installed in '$(which vpn)'"
+    messages "success" "VPN utility successfully installed in '$(which vpn)'"
     menu
   else
-    gum style --bold --foreground='#dc3545' "Installation failed"
+    messages "error" "Installation failed"
   fi
 }
 
 uninstall() {
   if [[ -f "/usr/local/bin/vpn" ]]; then
     sudo rm "/usr/local/bin/vpn"
-    gum style --bold --foreground='#198754' "VPN utility successfully uninstalled"
+    messages "success" "VPN utility successfully uninstalled"
   fi
 }
 
@@ -102,7 +125,7 @@ main() {
 
       for network in "${WIFI_NAME[@]}"; do
         if iwgetid | grep "$network" >/dev/null; then
-          gum style --bold --foreground='#ffc107' "Connected to '${network}' network that does not require VPN"
+          messages "warn" "Connected to '${network}' network that does not require VPN"
           exit 0
         fi
       done
@@ -121,18 +144,26 @@ main() {
 
       f5fpc --start -u "${UNAME}" -p "${PIN}${POINTSHARP_TOKEN}${PASSWORD}" -t "${SERVER_ADDR}" >/dev/null
       gum spin --spinner points --title "Connecting" -- sleep 20
-      gum style --bold "$(f5fpc --info | head -1)"
+
+      f5fpc --info >/dev/null
+      if [[ $? == "5" ]]; then
+        notify-send -a "VPN" -i "network-receive" -c "Network" "VPN connected" "You are now connected to Volvo Cars' network"
+        messages "info" "$(f5fpc --info | head -1)"
+      else
+        messages "error" "Error connecting to the VPN"
+      fi
 
       exit
       ;;
 
     "disconnect")
       gum spin --spinner points --title "Disconnecting" -- f5fpc --stop
+      notify-send -a "VPN" -i "network-offline" -c "Network" "VPN disconnected" "You are now not connected to Volvo Cars' network"
       exit
       ;;
 
     "status")
-      gum style --bold "$(f5fpc --info | head -1)"
+      messages "info" "$(f5fpc --info | head -1)"
       exit
       ;;
 
@@ -164,7 +195,7 @@ main() {
       if [[ -z "${OPERATION}" ]]; then
         menu
       else
-        gum style --bold --foreground='#dc3545' "Unrecognized option '${OPERATION}'"
+        messages "error" "Unrecognized option '${OPERATION}'"
         menu
       fi
       ;;
