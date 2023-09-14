@@ -6,16 +6,16 @@ OPERATION="$1"
 messages() {
   case "$1" in
   "success")
-    gum style --bold --foreground='#198754' "$2"
+    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground '#5cb85c' --bold --foreground='#5cb85c' "$2"
     ;;
   "info")
-    gum style --bold --foreground='#0dcaf0' "$2"
+    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground 212 --bold --foreground 212 "$2"
     ;;
   "warn")
-    gum style --bold --foreground='#ffc107' "$2"
+    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground '#ffc107' --bold --foreground='#ffc107' "$2"
     ;;
   "error")
-    gum style --bold --foreground='#dc3545' "$2"
+    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground '#dc3545' --bold --foreground='#dc3545' "$2"
     ;;
   esac
 }
@@ -26,7 +26,7 @@ check_dependencies() {
       sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg >/dev/null
     echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" |
       sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
-    sudo apt update && sudo apt install gum -y >/dev/null
+    sudo apt update >/dev/null && sudo apt install gum -y >/dev/null
   fi
 
   if ! which f5fpc &>/dev/null; then
@@ -121,22 +121,20 @@ main() {
   while true; do
     case "${OPERATION}" in
     "connect")
-      WIFI_NAME=('VolvoCars.1x' 'VolvoCars')
+      WIFI_NAME="VolvoCars"
 
-      for network in "${WIFI_NAME[@]}"; do
-        if iwgetid | grep "$network" >/dev/null; then
-          messages "warn" "Connected to '${network}' network that does not require VPN"
-          exit 0
-        fi
-      done
+      if iwgetid | grep "${WIFI_NAME}" >/dev/null; then
+        messages "warn" "Already connected to '${WIFI_NAME}' network"
+        gum confirm "Connect anyway?" || exit 0
+      fi
 
       f5fpc --info >/dev/null
       if [[ "$?" == "5" ]]; then
-        gum style --bold "$(f5fpc --stop)"
+        messages "info" "$(f5fpc --stop)"
       fi
 
       SERVER_ADDR="https://iconnect.global.volvocars.biz"
-      PASSWORD="$(sudo sed -n '1p' $INSTALL_DIR/pwd)" && echo "Credentials loaded"
+      PASSWORD="$(sudo sed -n '1p' $INSTALL_DIR/pwd)" # && echo "Credentials loaded"
       PIN="$(sudo sed -n '2p' $INSTALL_DIR/pwd)"
       OTP="$(sudo sed -n '3p' $INSTALL_DIR/pwd)"
       UNAME="$USER"
@@ -148,9 +146,9 @@ main() {
       f5fpc --info >/dev/null
       if [[ $? == "5" ]]; then
         notify-send -a "VPN" -i "network-receive" -c "Network" "VPN connected" "You are now connected to Volvo Cars' network"
-        messages "info" "$(f5fpc --info | head -1)"
+        messages "success" "Session established"
       else
-        messages "error" "Error connecting to the VPN"
+        messages "error" "Connection error"
       fi
 
       exit
@@ -158,6 +156,7 @@ main() {
 
     "disconnect")
       gum spin --spinner points --title "Disconnecting" -- f5fpc --stop
+      messages "info" "Disconnected successfully"
       notify-send -a "VPN" -i "network-offline" -c "Network" "VPN disconnected" "You are now not connected to Volvo Cars' network"
       exit
       ;;
