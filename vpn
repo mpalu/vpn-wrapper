@@ -6,16 +6,16 @@ OPERATION="$1"
 messages() {
   case "$1" in
   "success")
-    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground '#5cb85c' --bold --foreground='#5cb85c' "$2"
+    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground '#5cb85c' --bold --foreground='#5cb85c' "$2"
     ;;
   "info")
-    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground 212 --bold --foreground 212 "$2"
+    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground 212 --bold --foreground 212 "$2"
     ;;
   "warn")
-    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground '#ffc107' --bold --foreground='#ffc107' "$2"
+    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground '#ffc107' --bold --foreground='#ffc107' "$2"
     ;;
   "error")
-    gum style --border normal --width 50 --align center --margin "1" --padding "1 2" --border-foreground '#dc3545' --bold --foreground='#dc3545' "$2"
+    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground '#dc3545' --bold --foreground='#dc3545' "$2"
     ;;
   esac
 }
@@ -65,7 +65,7 @@ menu() {
 
 check_installation() {
   if [[ ! -f "$INSTALL_DIR/vpn" ]]; then
-    gum confirm "VPN utility is not installed in your system. Would you like to install?" && install
+    gum confirm "VPN utility is not installed in your system. Would you like to install it?" && install
   fi
 }
 
@@ -81,7 +81,7 @@ set_credentials() {
     sudo chown "$USER":"$USER" "$INSTALL_DIR/pwd"
   fi
 
-  gum input --password --placeholder "Enter your password (same as CDSID)" >"$INSTALL_DIR/pwd"
+  gum input --password --placeholder "Enter your CDSID password" >"$INSTALL_DIR/pwd"
   gum input --password --placeholder "Enter your PointSharp 4 digits PIN" >>"$INSTALL_DIR/pwd"
   gum input --password --placeholder "Enter your PointSharp 6 digits OTP" >>"$INSTALL_DIR/pwd"
   chmod 400 "$INSTALL_DIR/pwd"
@@ -134,11 +134,22 @@ main() {
       fi
 
       SERVER_ADDR="https://iconnect.global.volvocars.biz"
-      PASSWORD="$(sudo sed -n '1p' $INSTALL_DIR/pwd)" # && echo "Credentials loaded"
-      PIN="$(sudo sed -n '2p' $INSTALL_DIR/pwd)"
-      OTP="$(sudo sed -n '3p' $INSTALL_DIR/pwd)"
-      UNAME="$USER"
+      PASSWORD="$(sudo sed -n '1p' $INSTALL_DIR/pwd /dev/null 2>&1 || gum input --password --placeholder 'Enter your CDSID password')"
+      PIN="$(sudo sed -n '2p' $INSTALL_DIR/pwd /dev/null 2>&1 || gum input --password --placeholder 'Enter your PointSharp 4 digits PIN')"
+      OTP="$(sudo sed -n '3p' $INSTALL_DIR/pwd /dev/null 2>&1 || gum input --password --placeholder 'Enter your PointSharp 6 digits OTP')"
       POINTSHARP_TOKEN="$(java -jar $HOME/.pointsharp/pointsharp_v2.jar ${OTP})"
+      UNAME=""
+
+      if [[ "$(gum choose --timeout=5s --selected 'yes' --header "Is '$USER' your correct CDSID?" 'yes' 'no')" == 'yes' ]]; then
+        UNAME="$USER"
+      else
+        UNAME="$(gum input --placeholder 'Enter your CDSID')"
+      fi
+
+      if [[ -z "$SERVER_ADDR" ]] || [[ -z "$PASSWORD" ]] || [[ -z "$PIN" ]] || [[ -z "$OTP" ]] || [[ -z "$POINTSHARP_TOKEN" ]] || [[ -z "$UNAME" ]]; then
+        messages "warn" "A required input is missing. Please enter again"
+        main
+      fi
 
       f5fpc --start -u "${UNAME}" -p "${PIN}${POINTSHARP_TOKEN}${PASSWORD}" -t "${SERVER_ADDR}" >/dev/null
       gum spin --spinner points --title "Connecting" -- sleep 20
