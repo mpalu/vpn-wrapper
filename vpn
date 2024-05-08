@@ -5,17 +5,14 @@ OPERATION="$1"
 
 messages() {
   case "$1" in
-  "success")
-    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground '#5cb85c' --bold --foreground='#5cb85c' "$2"
-    ;;
   "info")
-    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground 212 --bold --foreground 212 "$2"
+    gum log -t "kitchen" --level info "$2"
     ;;
   "warn")
-    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground '#ffc107' --bold --foreground='#ffc107' "$2"
+    gum log -t "kitchen" --level warn "$2"
     ;;
   "error")
-    gum style --border normal --width 75 --align center --margin "1 5" --padding "1 2" --border-foreground '#dc3545' --bold --foreground='#dc3545' "$2"
+    gum log -t "kitchen" --level error "$2"
     ;;
   esac
 }
@@ -35,7 +32,7 @@ check_dependencies() {
       curl https://iconnect.global.volvocars.biz/public/share/linux_f5cli.x86_64.deb \
       --output /tmp/linux_f5cli.x86_64.deb &&
       sudo dpkg -i /tmp/linux_f5cli.x86_64.deb >/dev/null &&
-      messages "success" "F5 Linux CLI successfully installed"
+      messages "info" "F5 Linux CLI successfully installed"
   fi
 
   if ! which java &>/dev/null; then
@@ -43,7 +40,7 @@ check_dependencies() {
     gum spin --spinner dot --title "Installing..." -- \
       sudo apt update &&
       sudo apt install openjdk-11-jre -y >/dev/null &&
-      messages "success" "Java Runtime Environment successfully installed"
+      messages "info" "Java Runtime Environment successfully installed"
   fi
 
   if [[ ! -f "$HOME/.pointsharp/pointsharp_v2.jar" ]]; then
@@ -52,7 +49,7 @@ check_dependencies() {
     gum spin --spinner dot --title "Installing..." -- \
       curl https://confluence.volvocars.biz/download/attachments/259652341/pointsharp_v2.jar \
       --output "$HOME/.pointsharp/pointsharp_v2.jar" >/dev/null &&
-      messages "success" "Pointsharp CLI successfully installed"
+      messages "info" "Pointsharp CLI successfully installed"
   fi
 }
 
@@ -101,7 +98,7 @@ install() {
   sudo ln -f "$INSTALL_DIR/vpn" "/usr/local/bin/vpn"
 
   if which vpn >/dev/null; then
-    messages "success" "VPN utility successfully installed in '$(which vpn)'"
+    messages "info" "VPN utility successfully installed in '$(which vpn)'"
     menu
   else
     messages "error" "Installation failed"
@@ -111,7 +108,7 @@ install() {
 uninstall() {
   if [[ -f "/usr/local/bin/vpn" ]]; then
     sudo rm "/usr/local/bin/vpn"
-    messages "success" "VPN utility successfully uninstalled"
+    messages "info" "VPN utility successfully uninstalled"
   fi
 }
 
@@ -157,7 +154,7 @@ main() {
       f5fpc --info >/dev/null
       if [[ $? == "5" ]]; then
         notify-send -a "VPN" -i "network-receive" -c "Network" "VPN connected" "You are now connected to Volvo Cars' network"
-        messages "success" "Session established"
+        messages "info" "Session established"
       else
         messages "error" "Connection error"
       fi
@@ -188,7 +185,7 @@ main() {
       ;;
 
     "credentials")
-      sudo gum pager <"${INSTALL_DIR}/pwd"
+      gum pager "$(sudo cat ${INSTALL_DIR}/pwd)"
       exit
       ;;
 
